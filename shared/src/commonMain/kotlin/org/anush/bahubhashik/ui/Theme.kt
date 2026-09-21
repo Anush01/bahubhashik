@@ -21,6 +21,19 @@ private val Scheme = lightColorScheme(
     onPrimaryContainer = Color(0xFF2B1600),
     secondary = Color(0xFF00696E),
     onSecondary = Color.White,
+    // FilterChip draws its selected state from secondaryContainer. Leaving
+    // these unset gave the chips Material's default lavender, which had
+    // nothing to do with the rest of the app.
+    secondaryContainer = Color(0xFFFFDCC2),
+    onSecondaryContainer = Color(0xFF2B1600),
+    tertiary = Color(0xFF00696E),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFA8F1F5),
+    onTertiaryContainer = Color(0xFF002022),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    outline = Color(0xFF85736B),
+    outlineVariant = Color(0xFFD7C2B6),
     background = Color(0xFFFFF8F4),
     onBackground = Color(0xFF221A14),
     surface = Color(0xFFFFF8F4),
