@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.anush.bahubhashik.audio.AudioPlayer
@@ -45,7 +47,10 @@ import org.anush.bahubhashik.data.statusLabel
 fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) {
     var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // Two kinds of bad news: one leaves us with nothing to show, the other
+    // is something the person should know while still seeing their messages.
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
     var refreshNow by remember { mutableStateOf(0) }
 
     val recorder = remember { AudioRecorder() }
@@ -64,13 +69,34 @@ fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) 
         }
     }
 
+    /**
+     * A recording can't survive the app going to the background: Android's
+     * MediaRecorder would carry on capturing whatever the phone can hear, and
+     * iOS tears the audio session down partway through. Either way what comes
+     * back isn't what the person meant to send, so throw it away and say so
+     * rather than quietly handing them half a message.
+     *
+     * A finished-but-unsent recording is left alone — that one is already
+     * complete and the person still gets to choose.
+     */
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (recording) {
+            recorder.cancel()
+            recording = false
+            elapsed = 0.0
+            notice = "Recording stopped when you left the app. Nothing was saved."
+        }
+        player.stop()
+        playingId = null
+    }
+
     LaunchedEffect(me, other, refreshNow) {
         while (true) {
             try {
                 messages = api.conversation(me, other)
-                error = null
+                loadError = null
             } catch (e: Exception) {
-                if (messages.isEmpty()) error = "Couldn't load messages. ${e.message ?: ""}".trim()
+                if (messages.isEmpty()) loadError = "Couldn't load messages. ${e.message ?: ""}".trim()
             }
             loading = false
             delay(if (messages.any { it.isProcessing }) 3_000 else 10_000)
@@ -96,7 +122,7 @@ fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 loading -> Loading()
-                error != null -> ErrorBanner(error!!) { refreshNow++ }
+                loadError != null -> ErrorBanner(loadError!!) { refreshNow++ }
                 messages.isEmpty() -> Text(
                     "No messages yet. Hold the button to record one.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -133,6 +159,8 @@ fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) 
             }
         }
 
+        notice?.let { NoticeBanner(it) { notice = null } }
+
         RecordBar(
             recording = recording,
             elapsed = elapsed,
@@ -142,18 +170,19 @@ fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) 
                 scope.launch {
                     player.stop()
                     playingId = null
+                    notice = null
                     if (recorder.start()) {
                         elapsed = 0.0
                         recording = true
                     } else {
-                        error = "Couldn't use the microphone. Check the app's permission."
+                        notice = "Couldn't use the microphone. Check the app's permission."
                     }
                 }
             },
             onStop = {
                 pending = recorder.stop()
                 recording = false
-                if (pending == null) error = "That recording was too short to send."
+                if (pending == null) notice = "That recording was too short to send."
             },
             onDiscard = { pending = null },
             onSend = {
@@ -165,7 +194,7 @@ fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) 
                         pending = null
                         refreshNow++
                     } catch (e: Exception) {
-                        error = "Couldn't send. ${e.message ?: ""}".trim()
+                        notice = "Couldn't send. ${e.message ?: ""}".trim()
                     }
                     sending = false
                 }

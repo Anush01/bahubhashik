@@ -1,5 +1,6 @@
 package org.anush.bahubhashik.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 
 /** Deliberately tall: these are the main targets and the hands using them aren't steady. */
@@ -77,6 +79,36 @@ fun ErrorBanner(message: String, onRetry: (() -> Unit)? = null) {
         Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         if (onRetry != null) {
             TextButton(onClick = onRetry, colors = ButtonDefaults.textButtonColors()) { Text("Try again") }
+        }
+    }
+}
+
+/**
+ * For things that happened rather than things that are broken — a discarded
+ * recording, a send that didn't go through. Unlike [ErrorBanner] this sits
+ * alongside the content instead of replacing it, because hiding someone's
+ * whole conversation to tell them a recording was dropped is worse than the
+ * dropped recording.
+ */
+@Composable
+fun NoticeBanner(message: String, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f).padding(vertical = 10.dp),
+        )
+        TextButton(onClick = onDismiss) {
+            Text("OK", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
