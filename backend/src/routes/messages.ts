@@ -127,7 +127,8 @@ messages.post("/", upload.single("audio"), async (req, res) => {
       status: "uploaded",
       source_lang: sourceLang,
       target_lang: targetLang,
-      duration_seconds: durationSeconds,
+      // Column is int; clients report fractional seconds.
+      duration_seconds: durationSeconds === null ? null : Math.round(durationSeconds),
     })
     .select("*")
     .single();
