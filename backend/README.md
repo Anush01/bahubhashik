@@ -60,6 +60,20 @@ uses the synchronous STT endpoint instead of the slower batch job.
 
 Audio comes back as short-lived signed URLs, not paths.
 
+## Model choices (measured, not assumed)
+
+**Translation: `sarvam-translate:v1` (formal).** `mayura:v1` supports colloquial
+registers, which sounds like the better fit for voice notes — but on real
+Marathi→Kannada speech it leaves borrowed English in Latin script
+("tree park", "doctor", "walk"), which Kannada TTS cannot pronounce.
+`sarvam-translate:v1` returns fully native script. It also allows 2000 chars
+per request against mayura's 1000, so it needs fewer chunks.
+Note it rejects any `mode` other than `formal`, and rejects `output_script`
+entirely.
+
+**TTS: `bulbul:v3`.** Note v2's speaker names (`anushka`, `vidya`, ...) are
+rejected by v3 — see `SPEAKERS` in `src/services/sarvam.ts` for valid ones.
+
 ## Costs
 
 Roughly **₹25 per 5-minute message** (₹2.50 STT + ₹9 translate + ₹13.50 TTS) —

@@ -6,12 +6,27 @@ function required(name: string): string {
   return value;
 }
 
+/**
+ * Lazy on purpose. Tools that only touch Sarvam (scripts/try-pipeline.ts)
+ * shouldn't fail because Supabase isn't configured yet, and vice versa —
+ * each var is checked when something actually reads it.
+ */
 export const env = {
-  supabaseUrl: required("SUPABASE_URL"),
-  supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
-  bucket: process.env.SUPABASE_BUCKET ?? "audio",
-  sarvamApiKey: required("SARVAM_API_KEY"),
-  port: Number(process.env.PORT ?? 8787),
+  get supabaseUrl() {
+    return required("SUPABASE_URL");
+  },
+  get supabaseServiceRoleKey() {
+    return required("SUPABASE_SERVICE_ROLE_KEY");
+  },
+  get bucket() {
+    return process.env.SUPABASE_BUCKET ?? "audio";
+  },
+  get sarvamApiKey() {
+    return required("SARVAM_API_KEY");
+  },
+  get port() {
+    return Number(process.env.PORT ?? 8787);
+  },
 };
 
 export const LANGUAGES = ["en-IN", "hi-IN", "mr-IN", "gu-IN", "kn-IN"] as const;

@@ -5,13 +5,36 @@ import { concatAudio } from "../lib/wav.js";
 const BASE = "https://api.sarvam.ai";
 
 // Per Sarvam's documented caps, with headroom for the joining whitespace.
-const TRANSLATE_MAX_CHARS = 1800; // sarvam-translate:v1 allows 2000
-const TTS_MAX_CHARS = 2300;       // bulbul:v3 allows 2500
+const TTS_MAX_CHARS = 2300; // bulbul:v3 allows 2500
+
+/**
+ * The two translation models differ in more than register:
+ *   mayura:v1            1000 chars, colloquial modes, transliteration
+ *   sarvam-translate:v1  2000 chars, formal only (rejects any other mode)
+ *
+ * Colloquial sounds like the better fit for voice notes between friends, but
+ * measured on real Marathi->Kannada speech mayura leaves borrowed English in
+ * LATIN script ("tree park", "doctor"), which Kannada TTS cannot pronounce.
+ * sarvam-translate returns fully native script, so it wins on the thing that
+ * actually matters here: the output has to be speakable.
+ */
+export const TRANSLATE_MODELS = {
+  "sarvam-translate:v1": { maxChars: 1800, mode: "formal" },
+  "mayura:v1": { maxChars: 900, mode: "modern-colloquial" },
+} as const;
+
+export type TranslateModel = keyof typeof TRANSLATE_MODELS;
+export const DEFAULT_TRANSLATE_MODEL: TranslateModel = "sarvam-translate:v1";
 
 // The synchronous STT endpoint rejects audio over 30s; longer goes to the batch API.
 const SYNC_STT_MAX_SECONDS = 28;
 
-const SPEAKERS = ["anushka", "vidya", "manisha", "arya", "abhilash", "karun"] as const;
+/**
+ * bulbul:v3 voices. v2's names (anushka, vidya, manisha...) are rejected by v3.
+ * Female-only for now because every v0 user is a woman and a mismatched voice
+ * is jarring on a personal message; this should become a signup choice.
+ */
+const SPEAKERS = ["ritu", "priya", "neha", "pooja", "kavya", "shreya"] as const;
 
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return { "api-subscription-key": env.sarvamApiKey, ...extra };
@@ -23,7 +46,8 @@ async function readError(response: Response, label: string): Promise<Error> {
 }
 
 /** Same sender always gets the same synthesized voice, so they stay recognizable. */
-export function speakerFor(username: string): string {
+export function speakerFor(username: string, preferred?: string | null): string {
+  if (preferred) return preferred;
   let hash = 0;
   for (const char of username) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return SPEAKERS[hash % SPEAKERS.length]!;
@@ -149,10 +173,16 @@ function extractTranscript(payload: unknown): string {
 
 // ----------------------------------------------------------------- translate
 
-export async function translate(text: string, from: Language, to: Language): Promise<string> {
+export async function translate(
+  text: string,
+  from: Language,
+  to: Language,
+  model: TranslateModel = DEFAULT_TRANSLATE_MODEL,
+): Promise<string> {
   if (from === to) return text;
 
-  const chunks = chunkText(text, TRANSLATE_MAX_CHARS);
+  const { maxChars, mode } = TRANSLATE_MODELS[model];
+  const chunks = chunkText(text, maxChars);
   const out: string[] = [];
 
   for (const chunk of chunks) {
@@ -163,9 +193,8 @@ export async function translate(text: string, from: Language, to: Language): Pro
         input: chunk,
         source_language_code: from,
         target_language_code: to,
-        model: "sarvam-translate:v1",
-        // These are personal voice notes between friends, not documents.
-        mode: "modern-colloquial",
+        model,
+        mode,
       }),
     });
     if (!response.ok) throw await readError(response, "translate");
