@@ -1,6 +1,6 @@
 import { supabase, uploadAudio } from "../lib/supabase.js";
 import type { Language } from "../lib/env.js";
-import { speakerFor, synthesize, transcribe, translate } from "./sarvam.js";
+import { speakerFor, synthesize, transcribe, translate, type Voice } from "./sarvam.js";
 
 export type MessageStatus =
   | "uploaded"
@@ -12,7 +12,7 @@ export type MessageStatus =
 
 interface PipelineInput {
   messageId: string;
-  sender: string;
+  senderVoice: Voice;
   audio: Buffer;
   filename: string;
   sourceLang: Language;
@@ -38,7 +38,7 @@ async function setStatus(messageId: string, status: MessageStatus, fields: Recor
  * reason every stage records its partial output as it goes.
  */
 export async function runPipeline(input: PipelineInput): Promise<void> {
-  const { messageId, sender, audio, filename, sourceLang, targetLang, durationSeconds } = input;
+  const { messageId, senderVoice, audio, filename, sourceLang, targetLang, durationSeconds } = input;
   const started = Date.now();
 
   try {
@@ -51,7 +51,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
     if (!translatedText) throw new Error("Translation came back empty");
     await setStatus(messageId, "synthesizing", { translated_text: translatedText });
 
-    const speech = await synthesize(translatedText, targetLang, speakerFor(sender));
+    const speech = await synthesize(translatedText, targetLang, speakerFor(senderVoice));
     const path = `translated/${messageId}.wav`;
     await uploadAudio(path, speech, "audio/wav");
 

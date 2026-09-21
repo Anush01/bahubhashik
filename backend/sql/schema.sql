@@ -7,6 +7,9 @@ create extension if not exists "pgcrypto";
 create table if not exists users (
   username   text primary key,
   language   text not null check (language in ('en-IN','hi-IN','mr-IN','gu-IN','kn-IN')),
+  -- Which synthesized voice this person's messages are spoken in on the
+  -- recipient's phone. A voice choice, not a claim about the speaker.
+  voice      text not null default 'female' check (voice in ('female','male')),
   created_at timestamptz not null default now()
 );
 

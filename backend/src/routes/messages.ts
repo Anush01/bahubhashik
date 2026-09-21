@@ -3,6 +3,7 @@ import multer from "multer";
 import { supabase, signedUrl, uploadAudio } from "../lib/supabase.js";
 import { isLanguage, MAX_MESSAGE_SECONDS, type Language } from "../lib/env.js";
 import { runPipeline } from "../services/pipeline.js";
+import { isVoice, type Voice } from "../services/sarvam.js";
 
 export const messages = Router();
 
@@ -104,7 +105,7 @@ messages.post("/", upload.single("audio"), async (req, res) => {
 
   const { data: people, error: peopleError } = await supabase
     .from("users")
-    .select("username, language")
+    .select("username, language, voice")
     .in("username", [sender, recipient]);
   if (peopleError) return res.status(500).json({ error: peopleError.message });
 
@@ -151,7 +152,7 @@ messages.post("/", upload.single("audio"), async (req, res) => {
   // timeout. The client polls GET /messages/:id.
   void runPipeline({
     messageId: row.id,
-    sender,
+    senderVoice: isVoice(senderRow.voice) ? senderRow.voice : "female",
     audio: audio.buffer,
     filename: audio.originalname || `${row.id}.${extension}`,
     sourceLang: sourceLang as Language,
@@ -183,9 +184,15 @@ messages.post("/:id/retry", async (req, res) => {
   }
 
   const audio = Buffer.from(await download.arrayBuffer());
+  const { data: senderProfile } = await supabase
+    .from("users")
+    .select("voice")
+    .eq("username", row.sender)
+    .maybeSingle();
+
   void runPipeline({
     messageId: row.id,
-    sender: row.sender,
+    senderVoice: isVoice(senderProfile?.voice) ? (senderProfile.voice as Voice) : "female",
     audio,
     filename: row.original_audio_path.split("/").pop() ?? `${row.id}.m4a`,
     sourceLang: row.source_lang as Language,

@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: bahubhashik-api
+    runtime: node
+    plan: starter
+    region: singapore
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      # Set these in the Render dashboard — sync:false keeps them out of git.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: audio
+      - key: NODE_VERSION
+        value: "22"

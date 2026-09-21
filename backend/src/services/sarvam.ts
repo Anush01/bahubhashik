@@ -30,11 +30,16 @@ export const DEFAULT_TRANSLATE_MODEL: TranslateModel = "sarvam-translate:v1";
 const SYNC_STT_MAX_SECONDS = 28;
 
 /**
- * bulbul:v3 voices. v2's names (anushka, vidya, manisha...) are rejected by v3.
- * Female-only for now because every v0 user is a woman and a mismatched voice
- * is jarring on a personal message; this should become a signup choice.
+ * bulbul:v3 speakers. v2's names (anushka, vidya, manisha...) are rejected by v3.
+ * One per voice option; people pick theirs at signup, so the same sender always
+ * sounds the same to the person receiving them.
  */
-const SPEAKERS = ["ritu", "priya", "neha", "pooja", "kavya", "shreya"] as const;
+export const VOICES = { female: "ritu", male: "shubh" } as const;
+export type Voice = keyof typeof VOICES;
+
+export function isVoice(value: unknown): value is Voice {
+  return value === "female" || value === "male";
+}
 
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return { "api-subscription-key": env.sarvamApiKey, ...extra };
@@ -45,12 +50,8 @@ async function readError(response: Response, label: string): Promise<Error> {
   return new Error(`Sarvam ${label} failed (${response.status}): ${body.slice(0, 500)}`);
 }
 
-/** Same sender always gets the same synthesized voice, so they stay recognizable. */
-export function speakerFor(username: string, preferred?: string | null): string {
-  if (preferred) return preferred;
-  let hash = 0;
-  for (const char of username) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return SPEAKERS[hash % SPEAKERS.length]!;
+export function speakerFor(voice: Voice): string {
+  return VOICES[voice];
 }
 
 // ---------------------------------------------------------------- transcribe
