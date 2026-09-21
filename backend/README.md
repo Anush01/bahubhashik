@@ -29,6 +29,9 @@ npm install
 npm run dev
 ```
 
+Uses Supabase's new `sb_secret_` API key (the legacy `service_role` JWT still
+works via `SUPABASE_SERVICE_ROLE_KEY` if you have one).
+
 Create the tables by pasting [`sql/schema.sql`](sql/schema.sql) into the Supabase
 SQL Editor. The storage bucket is created automatically on first boot.
 

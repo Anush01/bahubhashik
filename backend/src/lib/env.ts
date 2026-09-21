@@ -15,8 +15,20 @@ export const env = {
   get supabaseUrl() {
     return required("SUPABASE_URL");
   },
-  get supabaseServiceRoleKey() {
-    return required("SUPABASE_SERVICE_ROLE_KEY");
+  /**
+   * Supabase's new `sb_secret_...` key. It replaces the legacy `service_role`
+   * JWT (deprecated end of 2026), is a drop-in for createClient(), and bypasses
+   * RLS the same way — so it stays server-side, always.
+   */
+  get supabaseSecretKey() {
+    const value = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!value) {
+      throw new Error(
+        "Missing SUPABASE_SECRET_KEY. Supabase Dashboard > Project Settings > API Keys > " +
+          "Secret keys (starts with sb_secret_). Copy .env.example to .env and fill it in.",
+      );
+    }
+    return value;
   },
   get bucket() {
     return process.env.SUPABASE_BUCKET ?? "audio";
