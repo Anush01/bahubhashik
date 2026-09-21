@@ -9,5 +9,5 @@ package org.anush.bahubhashik.data
  * 10.0.2.2.
  */
 object ServerConfig {
-    var baseUrl: String = "http://192.168.1.5:8787"
+    var baseUrl: String = "http://10.99.132.144:8787"
 }

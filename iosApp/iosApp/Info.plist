@@ -4,5 +4,13 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>BahuBhashik needs the microphone to record your voice messages.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Local-network HTTP for testing against a dev machine. Render serves https. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

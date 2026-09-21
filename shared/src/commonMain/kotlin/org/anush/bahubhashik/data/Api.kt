@@ -67,6 +67,11 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
     suspend fun message(id: String): Message =
         client.get("$baseUrl/messages/$id").body()
 
+    /** Re-run a failed message's pipeline without re-recording it. */
+    suspend fun retry(id: String) {
+        client.post("$baseUrl/messages/$id/retry")
+    }
+
     suspend fun send(
         sender: String,
         recipient: String,
