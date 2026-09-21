@@ -1,31 +1,91 @@
-This is a Kotlin Multiplatform project targeting Android, iOS.
+# BahuBhashik
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+बहुभाषिक — *multilingual*.
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+Voice messages between people who don't share a language. You record in
+Marathi; your friend hears it in Kannada. Nobody chooses a translation
+setting, because the app already knows what language each person speaks.
 
-### Running the apps
+Built for two specific people: my mother, who speaks Marathi, and her friend,
+who speaks Kannada.
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+## How it works
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+```
+record  ──▶  Sarvam STT  ──▶  Sarvam Translate  ──▶  Sarvam TTS  ──▶  play
+            (sender's lang)                        (recipient's lang)
+```
 
-### Running tests
+The source language comes from the sender's profile and the target from the
+recipient's, both snapshotted onto the message when it's sent — so changing
+your language setting later can't rewrite what old messages were.
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+Translation runs detached from the upload request (five minutes of audio takes
+minutes to process) and reports progress through a status field the client
+polls:
 
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+```
+uploaded → transcribing → translating → synthesizing → ready
+                                                     ↘ failed
+```
 
----
+The recipient gets the translated audio, the original recording, and both
+transcripts. Keeping the original matters: the translation is a synthesized
+voice, so hearing the sender's own voice is the part that makes it feel like
+a message from a person.
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+## Languages
+
+English, Hindi, Marathi, Gujarati, Kannada.
+
+Constrained by text-to-speech, which is the narrowest link in the chain.
+OpenAI's `gpt-realtime-translate` was the original plan and was dropped: it
+synthesizes into 13 languages, and Hindi is the only Indic one among them.
+
+## Layout
+
+| | |
+|---|---|
+| [`shared/`](shared) | Compose Multiplatform UI, Ktor client, `expect`/`actual` audio |
+| [`androidApp/`](androidApp) | Android entry point |
+| [`iosApp/`](iosApp) | iOS entry point |
+| [`backend/`](backend) | Express + TypeScript API and pipeline ([details](backend/README.md)) |
+
+## Running it
+
+**Backend** — needs a Supabase project and a Sarvam API key:
+
+```bash
+cd backend
+cp .env.example .env    # then fill it in
+npm install
+npm run dev
+```
+
+Paste [`backend/sql/schema.sql`](backend/sql/schema.sql) into the Supabase SQL
+editor. The storage bucket creates itself on first boot.
+
+**Apps** — point `ServerConfig.baseUrl` at the backend, then:
+
+```bash
+./gradlew :androidApp:assembleDebug     # Android
+open iosApp/iosApp.xcodeproj            # iOS
+```
+
+A phone can't reach `localhost` — use your machine's LAN address for local
+testing, or the deployed URL.
+
+## What v0 deliberately doesn't do
+
+- **No authentication.** A username is an identity; typing an existing one
+  signs you in as that person. Fine for three users who know each other.
+- **No notifications.** Clients poll.
+- **No message deletion**, no read state, no groups.
+- **Pipeline state lives in the process.** A restart mid-translation strands
+  a message; `POST /messages/:id/retry` is the way out.
+
+## Cost
+
+Around ₹25 per five-minute message — ₹2.50 transcription, ₹9 translation,
+₹13.50 speech synthesis. Synthesis dominates, which is not where you'd
+expect the money to go.

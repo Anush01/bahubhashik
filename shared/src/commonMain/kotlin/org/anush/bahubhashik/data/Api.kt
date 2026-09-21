@@ -3,6 +3,7 @@ package org.anush.bahubhashik.data
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -14,6 +15,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -32,6 +34,21 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
             connectTimeoutMillis = 30_000
             socketTimeoutMillis = 120_000
         }
+    }
+
+    /**
+     * Is the server awake? On Render's free plan it sleeps after fifteen
+     * minutes idle and takes the better part of a minute to come back, so
+     * this is polled behind a waiting screen rather than assumed.
+     *
+     * Short per-attempt timeout: we want to fail fast and retry, not hang.
+     */
+    suspend fun isAwake(): Boolean = try {
+        client.get("$baseUrl/health") {
+            timeout { requestTimeoutMillis = 10_000; connectTimeoutMillis = 10_000 }
+        }.status.isSuccess()
+    } catch (_: Exception) {
+        false
     }
 
     suspend fun signUp(username: String, language: String, voice: String): User =
