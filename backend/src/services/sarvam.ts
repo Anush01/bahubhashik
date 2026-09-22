@@ -1,20 +1,35 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { SarvamAIClient } from "sarvamai";
 import { env, type Language } from "../lib/env.js";
 import { chunkText } from "../lib/chunk.js";
 import { concatAudio } from "../lib/wav.js";
 
-const BASE = "https://api.sarvam.ai";
+/**
+ * Sarvam's own SDK rather than hand-rolled fetch calls.
+ *
+ * The batch transcription flow in particular is not something to reimplement:
+ * it creates a job, asks for presigned Azure URLs, uploads to those, starts
+ * the job, polls, then fetches results through more presigned URLs. Three of
+ * those steps have request shapes the public docs get wrong.
+ */
+const client = new SarvamAIClient({ apiSubscriptionKey: env.sarvamApiKey });
 
 // Per Sarvam's documented caps, with headroom for the joining whitespace.
 const TTS_MAX_CHARS = 2300; // bulbul:v3 allows 2500
+
+/** The synchronous endpoint rejects anything longer; past this we batch. */
+const SYNC_STT_MAX_SECONDS = 28;
 
 /**
  * The two translation models differ in more than register:
  *   mayura:v1            1000 chars, colloquial modes, transliteration
  *   sarvam-translate:v1  2000 chars, formal only (rejects any other mode)
  *
- * Colloquial sounds like the better fit for voice notes between friends, but
- * measured on real Marathi->Kannada speech mayura leaves borrowed English in
- * LATIN script ("tree park", "doctor"), which Kannada TTS cannot pronounce.
+ * Colloquial sounds like the better fit for voice notes, but measured on real
+ * Marathi->Kannada speech mayura leaves borrowed English in LATIN script
+ * ("tree park", "doctor"), which Kannada TTS cannot pronounce.
  * sarvam-translate returns fully native script, so it wins on the thing that
  * actually matters here: the output has to be speakable.
  */
@@ -26,28 +41,16 @@ export const TRANSLATE_MODELS = {
 export type TranslateModel = keyof typeof TRANSLATE_MODELS;
 export const DEFAULT_TRANSLATE_MODEL: TranslateModel = "sarvam-translate:v1";
 
-// The synchronous STT endpoint rejects audio over 30s; longer goes to the batch API.
-const SYNC_STT_MAX_SECONDS = 28;
-
 /**
- * bulbul:v3 speakers. v2's names (anushka, vidya, manisha...) are rejected by v3.
- * One per voice option; people pick theirs at signup, so the same sender always
- * sounds the same to the person receiving them.
+ * bulbul:v3 speakers. v2's names (anushka, vidya, manisha...) are rejected by
+ * v3. One per voice option; people pick theirs at signup, so the same sender
+ * always sounds the same to the person receiving them.
  */
 export const VOICES = { female: "ritu", male: "shubh" } as const;
 export type Voice = keyof typeof VOICES;
 
 export function isVoice(value: unknown): value is Voice {
   return value === "female" || value === "male";
-}
-
-function headers(extra: Record<string, string> = {}): Record<string, string> {
-  return { "api-subscription-key": env.sarvamApiKey, ...extra };
-}
-
-async function readError(response: Response, label: string): Promise<Error> {
-  const body = await response.text().catch(() => "");
-  return new Error(`Sarvam ${label} failed (${response.status}): ${body.slice(0, 500)}`);
 }
 
 export function speakerFor(voice: Voice): string {
@@ -69,107 +72,71 @@ export async function transcribe(
 }
 
 async function transcribeSync(audio: Buffer, filename: string, language: Language): Promise<string> {
-  const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(audio)]), filename);
-  form.append("model", "saaras:v3");
-  form.append("language_code", language);
-
-  const response = await fetch(`${BASE}/speech-to-text`, {
-    method: "POST",
-    headers: headers(),
-    body: form,
+  const response = await client.speechToText.transcribe({
+    file: new File([new Uint8Array(audio)], filename),
+    model: "saaras:v3",
+    language_code: language,
   });
-  if (!response.ok) throw await readError(response, "speech-to-text");
-
-  const json = (await response.json()) as { transcript?: string };
-  return json.transcript?.trim() ?? "";
+  return response.transcript?.trim() ?? "";
 }
 
 /**
- * Batch STT is a five-step dance: create job, upload, start, poll, download.
- * Used for anything over 30 seconds, which is most real messages.
+ * Anything over 30 seconds, which is most real messages. The SDK handles the
+ * upload-link dance; we only have to give it a file on disk, so the recording
+ * is written to a temp file and cleaned up afterwards.
  */
 async function transcribeBatch(audio: Buffer, filename: string, language: Language): Promise<string> {
-  const createResponse = await fetch(`${BASE}/speech-to-text/job/v1`, {
-    method: "POST",
-    headers: headers({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ model: "saaras:v3", mode: "transcribe", language_code: language }),
-  });
-  if (!createResponse.ok) throw await readError(createResponse, "batch job create");
+  const directory = await mkdtemp(path.join(tmpdir(), "bahubhashik-"));
+  const inputPath = path.join(directory, sanitise(filename));
+  const outputDirectory = path.join(directory, "out");
 
-  const { job_id: jobId } = (await createResponse.json()) as { job_id: string };
-  if (!jobId) throw new Error("Sarvam batch job create returned no job_id");
+  try {
+    await writeFile(inputPath, audio);
 
-  const form = new FormData();
-  form.append("job_id", jobId);
-  form.append("file", new Blob([new Uint8Array(audio)]), filename);
-  const uploadResponse = await fetch(`${BASE}/speech-to-text/job/v1/upload-files`, {
-    method: "POST",
-    headers: headers(),
-    body: form,
-  });
-  if (!uploadResponse.ok) throw await readError(uploadResponse, "batch upload");
+    const job = await client.speechToTextJob.createJob({
+      model: "saaras:v3",
+      mode: "transcribe",
+      languageCode: language,
+    });
 
-  const startResponse = await fetch(`${BASE}/speech-to-text/job/v1/start`, {
-    method: "POST",
-    headers: headers({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ job_id: jobId }),
-  });
-  if (!startResponse.ok) throw await readError(startResponse, "batch start");
+    await job.uploadFiles([inputPath]);
+    await job.start();
+    await job.waitUntilComplete();
 
-  const outputFile = await pollBatchJob(jobId);
+    const results = await job.getFileResults();
+    if (results.failed.length > 0) {
+      throw new Error(
+        `Sarvam could not transcribe the recording: ${results.failed[0]?.error_message ?? "no reason given"}`,
+      );
+    }
 
-  const downloadResponse = await fetch(`${BASE}/speech-to-text/job/v1/download-files`, {
-    method: "POST",
-    headers: headers({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ job_id: jobId, files: [outputFile] }),
-  });
-  if (!downloadResponse.ok) throw await readError(downloadResponse, "batch download");
-
-  const payload = await downloadResponse.json();
-  return extractTranscript(payload);
+    await job.downloadOutputs(outputDirectory);
+    return await readTranscript(outputDirectory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
-/** Sarvam asks for a 5s minimum poll interval. 10 minutes covers a 5-minute message comfortably. */
-async function pollBatchJob(jobId: string, intervalMs = 5000, timeoutMs = 600_000): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
+/** Sarvam writes one JSON file per input; we only ever send one. */
+async function readTranscript(directory: string): Promise<string> {
+  const { readdir } = await import("node:fs/promises");
+  const names = await readdir(directory);
+  const jsonName = names.find((name) => name.endsWith(".json"));
+  if (!jsonName) throw new Error(`Sarvam returned no transcript file (found: ${names.join(", ") || "nothing"})`);
 
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-
-    const response = await fetch(`${BASE}/speech-to-text/job/v1/${jobId}/status`, { headers: headers() });
-    if (!response.ok) throw await readError(response, "batch status");
-
-    const status = (await response.json()) as {
-      job_state?: string;
-      job_details?: Array<{ file_name?: string; output_file_name?: string; error?: string }>;
-    };
-
-    if (status.job_state === "Failed") {
-      const reason = status.job_details?.find((d) => d.error)?.error ?? "no reason given";
-      throw new Error(`Sarvam batch job ${jobId} failed: ${reason}`);
-    }
-    if (status.job_state === "Completed") {
-      return status.job_details?.[0]?.output_file_name ?? "0.json";
-    }
+  const parsed = JSON.parse(await readFile(path.join(directory, jsonName), "utf8")) as {
+    transcript?: string;
+  };
+  if (typeof parsed.transcript !== "string") {
+    throw new Error("Sarvam's transcript file had no transcript field");
   }
-
-  throw new Error(`Sarvam batch job ${jobId} did not finish within ${timeoutMs / 1000}s`);
+  return parsed.transcript.trim();
 }
 
-/** Download shape varies (bare object, array, or keyed by filename); accept all of them. */
-function extractTranscript(payload: unknown): string {
-  const candidate = Array.isArray(payload)
-    ? payload[0]
-    : typeof payload === "object" && payload !== null && !("transcript" in payload)
-      ? Object.values(payload as Record<string, unknown>)[0]
-      : payload;
-
-  const transcript = (candidate as { transcript?: string } | undefined)?.transcript;
-  if (typeof transcript !== "string") {
-    throw new Error(`Could not find a transcript in Sarvam's response: ${JSON.stringify(payload).slice(0, 300)}`);
-  }
-  return transcript.trim();
+/** Keep the extension — Sarvam infers the audio format from it. */
+function sanitise(filename: string): string {
+  const cleaned = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return cleaned || "recording.m4a";
 }
 
 // ----------------------------------------------------------------- translate
@@ -183,25 +150,17 @@ export async function translate(
   if (from === to) return text;
 
   const { maxChars, mode } = TRANSLATE_MODELS[model];
-  const chunks = chunkText(text, maxChars);
   const out: string[] = [];
 
-  for (const chunk of chunks) {
-    const response = await fetch(`${BASE}/translate`, {
-      method: "POST",
-      headers: headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        input: chunk,
-        source_language_code: from,
-        target_language_code: to,
-        model,
-        mode,
-      }),
+  for (const chunk of chunkText(text, maxChars)) {
+    const response = await client.text.translate({
+      input: chunk,
+      source_language_code: from,
+      target_language_code: to,
+      model,
+      mode,
     });
-    if (!response.ok) throw await readError(response, "translate");
-
-    const json = (await response.json()) as { translated_text?: string };
-    out.push(json.translated_text ?? "");
+    out.push(response.translated_text ?? "");
   }
 
   return out.join(" ").trim();
@@ -216,21 +175,16 @@ export async function synthesize(text: string, language: Language, speaker: stri
   const buffers: Buffer[] = [];
 
   for (const chunk of chunks) {
-    const response = await fetch(`${BASE}/text-to-speech`, {
-      method: "POST",
-      headers: headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        text: chunk,
-        target_language_code: language,
-        speaker,
-        model: "bulbul:v3",
-        output_audio_codec: "wav",
-      }),
+    const response = await client.textToSpeech.convert({
+      text: chunk,
+      language_code: language,
+      // Typed as a union of every voice Sarvam ships; ours come from VOICES.
+      speaker: speaker as Parameters<typeof client.textToSpeech.convert>[0]["speaker"],
+      model: "bulbul:v3",
+      output_audio_codec: "wav",
     });
-    if (!response.ok) throw await readError(response, "text-to-speech");
 
-    const json = (await response.json()) as { audios?: string[] };
-    for (const base64 of json.audios ?? []) buffers.push(Buffer.from(base64, "base64"));
+    for (const base64 of response.audios ?? []) buffers.push(Buffer.from(base64, "base64"));
   }
 
   return concatAudio(buffers);

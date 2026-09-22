@@ -63,6 +63,15 @@ uses the synchronous STT endpoint instead of the slower batch job.
 
 Audio comes back as short-lived signed URLs, not paths.
 
+## Why the SDK
+
+Calls go through Sarvam's own `sarvamai` package rather than hand-rolled
+fetch. The batch transcription flow is the reason: it creates a job, asks for
+presigned Azure URLs, uploads to those, starts the job, polls, then fetches
+results through more presigned URLs — and three of those steps have request
+shapes the public docs get wrong (`job_parameters` nesting, a JSON body where
+multipart looks right, and `/{job_id}/start` rather than `/start`).
+
 ## Model choices (measured, not assumed)
 
 **Translation: `sarvam-translate:v1` (formal).** `mayura:v1` supports colloquial
