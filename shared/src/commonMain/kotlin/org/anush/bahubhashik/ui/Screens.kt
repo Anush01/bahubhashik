@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.anush.bahubhashik.data.Api
+import org.anush.bahubhashik.data.ApiException
 import org.anush.bahubhashik.data.User
 import org.anush.bahubhashik.data.languageName
 
@@ -67,7 +68,7 @@ fun PeoplePickerScreen(api: Api, me: String, onPick: (String) -> Unit) {
             people = api.everyone().filter { it.username != me }
             error = null
         } catch (e: Exception) {
-            error = "Couldn't load people. ${e.message ?: ""}".trim()
+            error = (e as? ApiException)?.message ?: "Couldn't load people."
         }
         loading = false
     }

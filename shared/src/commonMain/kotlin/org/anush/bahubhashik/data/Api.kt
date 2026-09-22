@@ -2,6 +2,7 @@ package org.anush.bahubhashik.data
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -16,16 +17,44 @@ import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.client.statement.bodyAsText
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * A request the server refused, carrying its own explanation.
+ *
+ * Without this, Ktor happily tries to deserialize an error body into the
+ * success type and the user sees a serialization stack trace instead of
+ * "that PIN doesn't match".
+ */
+class ApiException(val status: Int, override val message: String) : Exception(message)
 
 class Api(private val baseUrl: String = ServerConfig.baseUrl) {
+
+    private val errorJson = Json { ignoreUnknownKeys = true }
 
     private val client = HttpClient {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
+        }
+        HttpResponseValidator {
+            validateResponse { response ->
+                if (response.status.isSuccess()) return@validateResponse
+                val body = runCatching { response.bodyAsText() }.getOrNull()
+                val explanation = body
+                    ?.let {
+                        runCatching {
+                            errorJson.parseToJsonElement(it).jsonObject["error"]?.jsonPrimitive?.content
+                        }.getOrNull()
+                    }
+                    ?: "The server returned ${response.status.value}."
+                throw ApiException(response.status.value, explanation)
+            }
         }
         install(HttpTimeout) {
             // Uploading five minutes of audio over patchy mobile data is slow;

@@ -165,7 +165,9 @@ private fun DrawerContents(
     onGo: (String) -> Unit,
     onSignOut: () -> Unit,
 ) {
-    ModalDrawerSheet {
+    // Without this the sheet uses Material's default lavender surface,
+    // which has nothing to do with the rest of the app.
+    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("BahuBhashik", style = MaterialTheme.typography.titleLarge)
             Text(

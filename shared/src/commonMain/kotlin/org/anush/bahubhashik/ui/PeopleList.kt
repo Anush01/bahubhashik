@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.anush.bahubhashik.data.ApiException
 import org.anush.bahubhashik.data.Message
 
 /**
@@ -50,7 +51,7 @@ fun GroupedMessagesScreen(
                 messages = load()
                 error = null
             } catch (e: Exception) {
-                if (messages.isEmpty()) error = "Couldn't reach the server. ${e.message ?: ""}".trim()
+                if (messages.isEmpty()) error = (e as? ApiException)?.message ?: "Couldn't reach the server."
             }
             loading = false
             delay(if (messages.any { it.isProcessing }) 3_000 else 10_000)

@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import org.anush.bahubhashik.audio.Session
 import org.anush.bahubhashik.data.Api
 import org.anush.bahubhashik.ui.BahuBhashikTheme
+import org.anush.bahubhashik.ui.Loading
 import org.anush.bahubhashik.ui.MainShell
 import org.anush.bahubhashik.ui.SignInFlow
 import org.anush.bahubhashik.ui.WakingScreen
@@ -32,7 +33,9 @@ private const val WAKE_BUDGET_SECONDS = 120
 fun App() {
     BahuBhashikTheme {
         val api = remember { Api() }
-        var me by remember { mutableStateOf(Session.savedUsername()) }
+        var me by remember { mutableStateOf<String?>(null) }
+        var checkingSession by remember { mutableStateOf(true) }
+        var needsPinFor by remember { mutableStateOf<String?>(null) }
 
         // Nothing in the app works without the backend, and on the free plan
         // it may be asleep. Hold everything behind a health check rather than
@@ -59,6 +62,33 @@ fun App() {
             gaveUp = true
         }
 
+        /**
+         * A remembered session skips the PIN, which is what was asked for —
+         * but it mustn't skip *setting* one, and it mustn't survive the
+         * account being deleted. So the session is checked once on launch.
+         */
+        LaunchedEffect(awake) {
+            if (!awake) return@LaunchedEffect
+            val saved = Session.savedUsername()
+            if (saved == null) {
+                checkingSession = false
+                return@LaunchedEffect
+            }
+            try {
+                val found = api.lookUp(saved)
+                when {
+                    !found.exists -> Session.clear()
+                    !found.hasPin -> needsPinFor = saved
+                    else -> me = saved
+                }
+            } catch (_: Exception) {
+                // Health already passed, so this is unlikely — and locking
+                // someone out over one failed request would be worse.
+                me = saved
+            }
+            checkingSession = false
+        }
+
         Box(
             modifier = Modifier
                 .background(MaterialTheme.colorScheme.background)
@@ -73,6 +103,14 @@ fun App() {
                     gaveUp = gaveUp,
                     onRetry = { wakeAttempt++ },
                 )
+
+                checkingSession -> Loading("Signing you in…")
+
+                needsPinFor != null -> SignInFlow(api, setPinFor = needsPinFor) { username ->
+                    Session.save(username)
+                    needsPinFor = null
+                    me = username
+                }
 
                 signedInAs == null -> SignInFlow(api) { username ->
                     Session.save(username)

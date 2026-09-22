@@ -40,6 +40,7 @@ import org.anush.bahubhashik.audio.AudioRecorder
 import org.anush.bahubhashik.audio.MAX_RECORDING_SECONDS
 import org.anush.bahubhashik.audio.Recording
 import org.anush.bahubhashik.data.Api
+import org.anush.bahubhashik.data.ApiException
 import org.anush.bahubhashik.data.Message
 import org.anush.bahubhashik.data.statusLabel
 
@@ -96,7 +97,7 @@ fun ConversationScreen(api: Api, me: String, other: String) {
                 messages = api.conversation(me, other)
                 loadError = null
             } catch (e: Exception) {
-                if (messages.isEmpty()) loadError = "Couldn't load messages. ${e.message ?: ""}".trim()
+                if (messages.isEmpty()) loadError = (e as? ApiException)?.message ?: "Couldn't load messages."
             }
             loading = false
             delay(if (messages.any { it.isProcessing }) 3_000 else 10_000)
@@ -122,7 +123,7 @@ fun ConversationScreen(api: Api, me: String, other: String) {
                 loading -> Loading()
                 loadError != null -> ErrorBanner(loadError!!) { refreshNow++ }
                 messages.isEmpty() -> Text(
-                    "No messages yet. Hold the button to record one.",
+                    "No messages yet. Tap the button below to record one.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -192,7 +193,7 @@ fun ConversationScreen(api: Api, me: String, other: String) {
                         pending = null
                         refreshNow++
                     } catch (e: Exception) {
-                        notice = "Couldn't send. ${e.message ?: ""}".trim()
+                        notice = (e as? ApiException)?.message ?: "Couldn't send. Check your connection."
                     }
                     sending = false
                 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,9 +22,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.anush.bahubhashik.data.Api
+import org.anush.bahubhashik.data.ApiException
 import org.anush.bahubhashik.data.LANGUAGE_NAMES
 import org.anush.bahubhashik.data.languageName
 
@@ -42,8 +45,12 @@ private sealed interface Step {
  * already had an account gets locked out by this change.
  */
 @Composable
-fun SignInFlow(api: Api, onSignedIn: (String) -> Unit) {
-    var step by remember { mutableStateOf<Step>(Step.Name) }
+fun SignInFlow(api: Api, setPinFor: String? = null, onSignedIn: (String) -> Unit) {
+    // A remembered session for someone who has no PIN yet lands here: they
+    // were signed up before PINs existed, so ask before letting them back in.
+    var step by remember(setPinFor) {
+        mutableStateOf<Step>(if (setPinFor != null) Step.FirstPin(setPinFor) else Step.Name)
+    }
 
     when (val current = step) {
         Step.Name -> NameStep(
@@ -68,14 +75,15 @@ fun SignInFlow(api: Api, onSignedIn: (String) -> Unit) {
         )
 
         is Step.FirstPin -> ChoosePinStep(
-            title = "Choose a PIN",
-            subtitle = "You'll need these four digits each time you sign in. " +
-                "Nobody else can see your messages without them.",
+            // Name in the title: a resumed session lands straight here, and
+            // "Choose a PIN" alone doesn't say whose.
+            title = current.username,
+            subtitle = "Choose a PIN. You'll need it each time you sign in.",
             onBack = { step = Step.Name },
             onChosen = { pin, fail ->
                 runCatching { api.setPin(current.username, pin) }
                     .onSuccess { onSignedIn(current.username) }
-                    .onFailure { fail("Couldn't save your PIN. ${it.message ?: ""}".trim()) }
+                    .onFailure { fail((it as? ApiException)?.message ?: "Couldn't save your PIN.") }
             },
         )
     }
@@ -124,7 +132,7 @@ private fun NameStep(
                             else -> onNeedsPin(username)
                         }
                     } catch (e: Exception) {
-                        error = "Couldn't reach the server. ${e.message ?: ""}".trim()
+                        error = (e as? ApiException)?.message ?: "Couldn't reach the server."
                     }
                     busy = false
                 }
@@ -141,13 +149,13 @@ private fun NewPersonStep(api: Api, username: String, onBack: () -> Unit, onCrea
 
     if (choosingPin) {
         ChoosePinStep(
-            title = "Choose a PIN",
-            subtitle = "You'll need these four digits each time you sign in.",
+            title = username,
+            subtitle = "Choose a PIN. You'll need it each time you sign in.",
             onBack = { choosingPin = false },
             onChosen = { pin, fail ->
                 runCatching { api.createAccount(username, language, voice, pin) }
                     .onSuccess { onCreated(username) }
-                    .onFailure { fail("Couldn't create your account. ${it.message ?: ""}".trim()) }
+                    .onFailure { fail((it as? ApiException)?.message ?: "Couldn't create your account.") }
             },
         )
         return
@@ -194,17 +202,17 @@ private fun PasswordStep(api: Api, username: String, onBack: () -> Unit, onSigne
             api.signIn(username, pin)
             onSignedIn(username)
         } catch (e: Exception) {
-            error = if (e.message?.contains("401") == true) {
+            error = if (e is ApiException && e.status == 401) {
                 "That PIN doesn't match. Try again."
             } else {
-                "Couldn't sign in. ${e.message ?: ""}".trim()
+                (e as? ApiException)?.message ?: "Couldn't sign in. Check your connection."
             }
             pin = ""
             busy = false
         }
     }
 
-    AuthScaffold(title = username, subtitle = "Enter your PIN", onBack = onBack) {
+    AuthScaffold(title = username, subtitle = "Enter your PIN", onBack = onBack, subtitleMinHeight = 64.dp) {
         PinPad(pin = pin, onPinChange = { pin = it }, enabled = !busy)
         error?.let {
             Text(
@@ -262,6 +270,7 @@ private fun ChoosePinStep(
         title = title,
         subtitle = if (first == null) subtitle else "Enter the same four digits again",
         onBack = onBack,
+        subtitleMinHeight = 64.dp,
     ) {
         PinPad(pin = pin, onPinChange = { pin = it }, enabled = !busy)
         error?.let {
@@ -281,6 +290,13 @@ private fun AuthScaffold(
     title: String,
     subtitle: String?,
     onBack: (() -> Unit)? = null,
+    /**
+     * Minimum height reserved for the subtitle. The PIN screens change their
+     * subtitle between steps, and without this the keypad slides up and down
+     * under the user's finger mid-entry. A minimum rather than a fixed height
+     * so longer text can still grow instead of being clipped.
+     */
+    subtitleMinHeight: Dp = Dp.Unspecified,
     content: @Composable () -> Unit,
 ) {
     Column(
@@ -299,7 +315,15 @@ private fun AuthScaffold(
                 it,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (subtitleMinHeight != Dp.Unspecified) {
+                            Modifier.heightIn(min = subtitleMinHeight)
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         }
         content()
