@@ -12,6 +12,19 @@ data class User(
 @Serializable
 data class UsersResponse(val users: List<User>)
 
+/**
+ * Tells the sign-in flow which screen to show next: a name it's never seen,
+ * a name with a PIN, or a name from before PINs existed.
+ */
+@Serializable
+data class Lookup(
+    val exists: Boolean,
+    val hasPin: Boolean,
+    val username: String? = null,
+    val language: String? = null,
+    val voice: String? = null,
+)
+
 @Serializable
 data class LanguagesResponse(val languages: List<String>, val voices: List<String>)
 

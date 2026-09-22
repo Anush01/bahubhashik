@@ -2,6 +2,7 @@ package org.anush.bahubhashik.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,27 +36,6 @@ fun BigButton(
         shape = MaterialTheme.shapes.large,
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge)
-    }
-}
-
-@Composable
-fun ScreenHeader(title: String, onBack: (() -> Unit)? = null, action: (@Composable () -> Unit)? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onBack != null) {
-                TextButton(onClick = onBack) { Text("‹ Back", style = MaterialTheme.typography.titleMedium) }
-            }
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(start = if (onBack != null) 4.dp else 0.dp),
-            )
-        }
-        action?.invoke()
     }
 }
 
@@ -109,6 +90,29 @@ fun NoticeBanner(message: String, onDismiss: () -> Unit) {
         )
         TextButton(onClick = onDismiss) {
             Text("OK", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** Single-choice chips that wrap — languages, voices. */
+@Composable
+fun ChipRow(
+    options: List<String>,
+    selected: String,
+    label: (String) -> String,
+    onSelect: (String) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(label(option), style = MaterialTheme.typography.bodyLarge) },
+            )
         }
     }
 }

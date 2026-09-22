@@ -44,7 +44,7 @@ import org.anush.bahubhashik.data.Message
 import org.anush.bahubhashik.data.statusLabel
 
 @Composable
-fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) {
+fun ConversationScreen(api: Api, me: String, other: String) {
     var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     // Two kinds of bad news: one leaves us with nothing to show, the other
@@ -116,9 +116,7 @@ fun ConversationScreen(api: Api, me: String, other: String, onBack: () -> Unit) 
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp)) {
-        ScreenHeader(other, onBack = onBack)
-
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 8.dp)) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 loading -> Loading()

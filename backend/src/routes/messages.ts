@@ -51,21 +51,30 @@ async function present(row: MessageRow) {
 }
 
 /**
- * Inbox:        GET /messages?user=sunita
+ * Received:     GET /messages?user=sunita
+ * Sent:         GET /messages?user=sunita&box=sent
  * Conversation: GET /messages?user=sunita&with=lakshmi   (both directions)
  */
 messages.get("/", async (req, res) => {
   const user = String(req.query.user ?? "").trim();
   const other = String(req.query.with ?? "").trim();
+  const box = String(req.query.box ?? "received").trim();
   if (!user) return res.status(400).json({ error: "user query parameter is required" });
+  if (box !== "received" && box !== "sent") {
+    return res.status(400).json({ error: 'box must be "received" or "sent"' });
+  }
 
   let query = supabase.from("messages").select("*").order("created_at", { ascending: false });
 
-  query = other
-    ? query.or(
-        `and(sender.eq.${user},recipient.eq.${other}),and(sender.eq.${other},recipient.eq.${user})`,
-      )
-    : query.eq("recipient", user);
+  if (other) {
+    query = query.or(
+      `and(sender.eq.${user},recipient.eq.${other}),and(sender.eq.${other},recipient.eq.${user})`,
+    );
+  } else if (box === "sent") {
+    query = query.eq("sender", user);
+  } else {
+    query = query.eq("recipient", user);
+  }
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });

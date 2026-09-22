@@ -51,18 +51,31 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
         false
     }
 
-    suspend fun signUp(username: String, language: String, voice: String): User =
-        client.post("$baseUrl/users") {
+    /** Does this name exist, and has it got a PIN yet? */
+    suspend fun lookUp(username: String): Lookup =
+        client.get("$baseUrl/users/lookup") { parameter("username", username) }.body()
+
+    suspend fun createAccount(username: String, language: String, voice: String, pin: String): User =
+        postJson(
+            "$baseUrl/users",
+            "username" to username,
+            "language" to language,
+            "voice" to voice,
+            "pin" to pin,
+        )
+
+    /** Verified server-side; the stored PIN is never sent to the app. */
+    suspend fun signIn(username: String, pin: String): User =
+        postJson("$baseUrl/users/login", "username" to username, "pin" to pin)
+
+    /** First PIN for someone who signed up before PINs existed. */
+    suspend fun setPin(username: String, pin: String): User =
+        postJson("$baseUrl/users/pin", "username" to username, "pin" to pin)
+
+    private suspend inline fun <reified T> postJson(url: String, vararg fields: Pair<String, String>): T =
+        client.post(url) {
             contentType(ContentType.Application.Json)
-            setBody(
-                JsonObject(
-                    mapOf(
-                        "username" to JsonPrimitive(username),
-                        "language" to JsonPrimitive(language),
-                        "voice" to JsonPrimitive(voice),
-                    ),
-                ),
-            )
+            setBody(JsonObject(fields.associate { (k, v) -> k to JsonPrimitive(v) }))
         }.body()
 
     suspend fun everyone(): List<User> =
@@ -72,6 +85,13 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
     suspend fun inbox(username: String): List<Message> =
         client.get("$baseUrl/messages") {
             parameter("user", username)
+        }.body<MessagesResponse>().messages
+
+    /** Messages this person has sent to everyone else. */
+    suspend fun sent(username: String): List<Message> =
+        client.get("$baseUrl/messages") {
+            parameter("user", username)
+            parameter("box", "sent")
         }.body<MessagesResponse>().messages
 
     /** One conversation, both directions. */

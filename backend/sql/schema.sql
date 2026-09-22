@@ -10,6 +10,13 @@ create table if not exists users (
   -- Which synthesized voice this person's messages are spoken in on the
   -- recipient's phone. A voice choice, not a claim about the speaker.
   voice      text not null default 'female' check (voice in ('female','male')),
+
+  -- Four digits, stored in the clear at the owner's request. Gates the app's
+  -- UI only: the message endpoints are deliberately unauthenticated in v0.
+  -- Nullable so anyone who signed up before PINs existed is asked to set one
+  -- instead of being locked out.
+  pin        text check (pin is null or pin ~ '^[0-9]{4}$'),
+
   created_at timestamptz not null default now()
 );
 
