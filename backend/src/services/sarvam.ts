@@ -4,7 +4,8 @@ import path from "node:path";
 import { SarvamAIClient } from "sarvamai";
 import { env, type Language } from "../lib/env.js";
 import { chunkText } from "../lib/chunk.js";
-import { concatAudio } from "../lib/wav.js";
+import { concatAudio, parseWav } from "../lib/wav.js";
+import { encodeMp3 } from "../lib/mp3.js";
 
 /**
  * Sarvam's own SDK rather than hand-rolled fetch calls.
@@ -168,6 +169,12 @@ export async function translate(
 
 // ----------------------------------------------------------------------- tts
 
+/**
+ * Returns MP3. Sarvam can emit mp3 directly, but only per request — and a
+ * five-minute message needs several requests, which can only be joined
+ * safely as PCM. So chunks come back as WAV, get stitched, and the result is
+ * encoded once.
+ */
 export async function synthesize(text: string, language: Language, speaker: string): Promise<Buffer> {
   const chunks = chunkText(text, TTS_MAX_CHARS);
   if (chunks.length === 0) throw new Error("Nothing to synthesize");
@@ -187,5 +194,5 @@ export async function synthesize(text: string, language: Language, speaker: stri
     for (const base64 of response.audios ?? []) buffers.push(Buffer.from(base64, "base64"));
   }
 
-  return concatAudio(buffers);
+  return encodeMp3(parseWav(concatAudio(buffers)));
 }

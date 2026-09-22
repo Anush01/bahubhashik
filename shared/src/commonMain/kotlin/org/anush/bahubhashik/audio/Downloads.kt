@@ -28,8 +28,18 @@ expect object Downloads {
  * The name the person on the other end sees in WhatsApp or their mail client,
  * so it has to read like something a human sent. The message id keeps files
  * apart via the directory they sit in, never by being in the name.
+ *
+ * The extension comes from the stored file rather than being assumed: new
+ * messages are MP3, but ones translated before that change are still WAV, and
+ * a .mp3 name on WAV bytes is worse than either.
  */
-fun downloadFilename(sender: String, recipient: String): String {
+fun downloadFilename(sender: String, recipient: String, sourceUrl: String): String {
     val safe = { text: String -> text.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(24) }
-    return "BahuBhashik ${safe(sender)} to ${safe(recipient)}.wav"
+    return "BahuBhashik ${safe(sender)} to ${safe(recipient)}.${extensionOf(sourceUrl)}"
+}
+
+/** Signed URLs carry a query string, so the extension sits before the '?'. */
+private fun extensionOf(url: String): String {
+    val candidate = url.substringBefore('?').substringAfterLast('.', "").lowercase()
+    return if (candidate.length in 2..4 && candidate.all { it.isLetterOrDigit() }) candidate else "mp3"
 }

@@ -50,13 +50,23 @@ actual object Downloads {
             ?.toSet()
             ?: emptySet()
 
+    /** Sharing an audio file with the wrong type makes apps refuse to open it. */
+    private fun mimeTypeFor(extension: String): String = when (extension.lowercase()) {
+        "mp3" -> "audio/mpeg"
+        "m4a", "aac", "mp4" -> "audio/mp4"
+        "wav" -> "audio/wav"
+        "ogg", "opus" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        else -> "audio/*"
+    }
+
     actual fun share(messageId: String) {
         val file = fileFor(messageId) ?: return
         val context = AndroidContext.application
 
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = "audio/wav"
+            type = mimeTypeFor(file.extension)
             putExtra(Intent.EXTRA_STREAM, uri)
             // EXTRA_STREAM alone grants the *target* app access but not the
             // chooser, which then can't read the file to preview it. ClipData

@@ -147,7 +147,7 @@ fun ConversationScreen(api: Api, me: String, other: String) {
                                     try {
                                         Downloads.save(
                                             messageId = message.id,
-                                            filename = downloadFilename(message.sender, message.recipient),
+                                            filename = downloadFilename(message.sender, message.recipient, url),
                                             bytes = api.download(url),
                                         )
                                         savedIds = Downloads.savedIds()

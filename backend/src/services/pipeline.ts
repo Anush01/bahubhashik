@@ -52,8 +52,8 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
     await setStatus(messageId, "synthesizing", { translated_text: translatedText });
 
     const speech = await synthesize(translatedText, targetLang, speakerFor(senderVoice));
-    const path = `translated/${messageId}.wav`;
-    await uploadAudio(path, speech, "audio/wav");
+    const path = `translated/${messageId}.mp3`;
+    await uploadAudio(path, speech, "audio/mpeg");
 
     await setStatus(messageId, "ready", { translated_audio_path: path, error: null });
     console.log(`[pipeline] ${messageId} ready in ${((Date.now() - started) / 1000).toFixed(1)}s`);

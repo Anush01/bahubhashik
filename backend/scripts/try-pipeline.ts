@@ -37,7 +37,7 @@ console.log(`\n  ${translatedText}\n`);
 console.log(`[3/3] synthesizing (${to})…`);
 const speech = await synthesize(translatedText, to as Language, speakerFor("demo"));
 
-const outputPath = inputPath.replace(/\.[^.]+$/, "") + `.${to}.wav`;
+const outputPath = inputPath.replace(/\.[^.]+$/, "") + `.${to}.mp3`;
 await writeFile(outputPath, speech);
 
 // Rates from https://docs.sarvam.ai/api/getting-started/pricing
