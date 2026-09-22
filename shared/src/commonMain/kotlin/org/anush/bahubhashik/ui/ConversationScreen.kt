@@ -37,6 +37,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.anush.bahubhashik.audio.AudioPlayer
 import org.anush.bahubhashik.audio.AudioRecorder
+import org.anush.bahubhashik.audio.Downloads
+import org.anush.bahubhashik.audio.downloadFilename
 import org.anush.bahubhashik.audio.MAX_RECORDING_SECONDS
 import org.anush.bahubhashik.audio.Recording
 import org.anush.bahubhashik.data.Api
@@ -61,6 +63,9 @@ fun ConversationScreen(api: Api, me: String, other: String) {
     var pending by remember { mutableStateOf<Recording?>(null) }
     var sending by remember { mutableStateOf(false) }
     var playingId by remember { mutableStateOf<String?>(null) }
+    // Straight from the filesystem, refreshed after every save or delete.
+    var savedIds by remember { mutableStateOf(Downloads.savedIds()) }
+    var downloadingId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
@@ -133,6 +138,31 @@ fun ConversationScreen(api: Api, me: String, other: String) {
                             message = message,
                             fromMe = message.sender == me,
                             isPlaying = playingId == message.id,
+                            isSaved = message.id in savedIds,
+                            isDownloading = downloadingId == message.id,
+                            onSave = {
+                                val url = message.translatedAudioUrl ?: return@MessageCard
+                                downloadingId = message.id
+                                scope.launch {
+                                    try {
+                                        Downloads.save(
+                                            messageId = message.id,
+                                            filename = downloadFilename(message.sender, message.recipient),
+                                            bytes = api.download(url),
+                                        )
+                                        savedIds = Downloads.savedIds()
+                                    } catch (e: Exception) {
+                                        notice = (e as? ApiException)?.message
+                                            ?: "Couldn't save that. Check your connection."
+                                    }
+                                    downloadingId = null
+                                }
+                            },
+                            onShare = { Downloads.share(message.id) },
+                            onRemoveDownload = {
+                                Downloads.delete(message.id)
+                                savedIds = Downloads.savedIds()
+                            },
                             onPlay = { url ->
                                 if (playingId == message.id) {
                                     player.stop()
@@ -207,7 +237,12 @@ private fun MessageCard(
     message: Message,
     fromMe: Boolean,
     isPlaying: Boolean,
+    isSaved: Boolean,
+    isDownloading: Boolean,
     onPlay: (String) -> Unit,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+    onRemoveDownload: () -> Unit,
     onRetry: () -> Unit,
 ) {
     Card(
@@ -272,8 +307,61 @@ private fun MessageCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+
+                    if (translated != null) {
+                        DownloadActions(
+                            isSaved = isSaved,
+                            isDownloading = isDownloading,
+                            onSave = onSave,
+                            onShare = onShare,
+                            onRemoveDownload = onRemoveDownload,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Saving keeps a copy of the *translation* — the version the other person can
+ * understand, and so the only one worth sending on to someone without the app.
+ */
+@Composable
+private fun DownloadActions(
+    isSaved: Boolean,
+    isDownloading: Boolean,
+    onSave: () -> Unit,
+    onShare: () -> Unit,
+    onRemoveDownload: () -> Unit,
+) {
+    when {
+        isDownloading -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(top = 4.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            Text("Saving to this phone…", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        isSaved -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "Saved on this phone",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                BigButton("Share", onShare, modifier = Modifier.weight(1f))
+                TextButton(onClick = onRemoveDownload) {
+                    Text("Remove", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+
+        else -> TextButton(onClick = onSave, modifier = Modifier.padding(top = 4.dp)) {
+            Text("Save to this phone", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

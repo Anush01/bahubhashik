@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -17,11 +18,15 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.savedstate.read
 import kotlinx.coroutines.launch
+import org.anush.bahubhashik.audio.Downloads
 import org.anush.bahubhashik.data.Api
 
 private object Route {
@@ -55,9 +61,42 @@ fun MainShell(api: Api, me: String, onSignOut: () -> Unit) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    var confirmSignOut by remember { mutableStateOf(false) }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val isTopLevel = route == null || route == Route.INBOX || route == Route.SENT
+
+    if (confirmSignOut) {
+        // Signing out wipes saved recordings, which is not something to do
+        // silently to files someone chose to keep.
+        AlertDialog(
+            // Same reason as the drawer: the default surface is lavender.
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text("Sign out?", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Text(
+                    "Messages you saved to this phone will be removed. " +
+                        "You can save them again after signing back in.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSignOut = false
+                    Downloads.deleteAll()
+                    onSignOut()
+                }) {
+                    Text("Sign out", style = MaterialTheme.typography.labelLarge)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSignOut = false }) {
+                    Text("Stay signed in", style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+        )
+    }
 
     ModalNavigationDrawer(
         drawerState = drawer,
@@ -76,7 +115,7 @@ fun MainShell(api: Api, me: String, onSignOut: () -> Unit) {
                 },
                 onSignOut = {
                     scope.launch { drawer.close() }
-                    onSignOut()
+                    confirmSignOut = true
                 },
             )
         },

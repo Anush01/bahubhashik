@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.anush.bahubhashik.data.ApiException
+import org.anush.bahubhashik.audio.Downloads
 import org.anush.bahubhashik.data.Message
 
 /**
@@ -42,6 +43,9 @@ fun GroupedMessagesScreen(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
+    // Recomputed on every poll so a download made inside a conversation is
+    // reflected here when you come back.
+    var savedIds by remember { mutableStateOf(Downloads.savedIds()) }
 
     // No push notifications in v0, so this polls — every three seconds while
     // something is mid-pipeline, backing off to ten when nothing is.
@@ -53,6 +57,7 @@ fun GroupedMessagesScreen(
             } catch (e: Exception) {
                 if (messages.isEmpty()) error = (e as? ApiException)?.message ?: "Couldn't reach the server."
             }
+            savedIds = Downloads.savedIds()
             loading = false
             delay(if (messages.any { it.isProcessing }) 3_000 else 10_000)
         }
@@ -83,6 +88,7 @@ fun GroupedMessagesScreen(
                             count = theirs.size,
                             pending = theirs.count { it.isProcessing },
                             failed = theirs.count { it.hasFailed },
+                            saved = theirs.count { it.id in savedIds },
                             onClick = { onOpenConversation(person) },
                         )
                     }
@@ -93,7 +99,14 @@ fun GroupedMessagesScreen(
 }
 
 @Composable
-private fun PersonCard(person: String, count: Int, pending: Int, failed: Int, onClick: () -> Unit) {
+private fun PersonCard(
+    person: String,
+    count: Int,
+    pending: Int,
+    failed: Int,
+    saved: Int,
+    onClick: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -105,6 +118,7 @@ private fun PersonCard(person: String, count: Int, pending: Int, failed: Int, on
                     append(if (count == 1) "1 message" else "$count messages")
                     if (pending > 0) append(" · $pending still arriving")
                     if (failed > 0) append(" · $failed didn't work")
+                    if (saved > 0) append(" · $saved saved")
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (failed > 0) MaterialTheme.colorScheme.error else Color.Unspecified,

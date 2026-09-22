@@ -133,6 +133,12 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
     suspend fun message(id: String): Message =
         client.get("$baseUrl/messages/$id").body()
 
+    /**
+     * Fetch a signed audio URL's bytes. Points at Supabase storage rather
+     * than our own API, but the same failure handling applies.
+     */
+    suspend fun download(url: String): ByteArray = client.get(url).body()
+
     /** Re-run a failed message's pipeline without re-recording it. */
     suspend fun retry(id: String) {
         client.post("$baseUrl/messages/$id/retry")
