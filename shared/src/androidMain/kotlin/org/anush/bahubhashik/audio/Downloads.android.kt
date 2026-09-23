@@ -7,6 +7,9 @@ import java.io.File
 
 private const val FOLDER = "downloads"
 
+/** Left behind in a message's directory when its saved copy is deleted by hand. */
+private const val REMOVED_MARKER = ".removed"
+
 /**
  * Files live in the app's private files dir, exposed to other apps only
  * through a FileProvider when the user actually shares one — no storage
@@ -22,11 +25,12 @@ actual object Downloads {
 
     private fun directory(messageId: String) = File(root(), messageId)
 
+    /** The saved audio, ignoring the removed marker (and anything else hidden). */
     private fun fileFor(messageId: String): File? =
-        directory(messageId).listFiles()?.firstOrNull()
+        directory(messageId).listFiles()?.firstOrNull { !it.name.startsWith(".") }
 
     actual fun save(messageId: String, filename: String, bytes: ByteArray): String {
-        delete(messageId)
+        directory(messageId).deleteRecursively()
         val directory = directory(messageId).apply { mkdirs() }
         val file = File(directory, filename)
         file.writeBytes(bytes)
@@ -36,8 +40,14 @@ actual object Downloads {
     actual fun isSaved(messageId: String): Boolean = fileFor(messageId) != null
 
     actual fun delete(messageId: String) {
-        directory(messageId).deleteRecursively()
+        val directory = directory(messageId)
+        directory.deleteRecursively()
+        directory.mkdirs()
+        File(directory, REMOVED_MARKER).createNewFile()
     }
+
+    actual fun wasRemoved(messageId: String): Boolean =
+        File(directory(messageId), REMOVED_MARKER).exists()
 
     actual fun deleteAll() {
         root().deleteRecursively()
@@ -45,7 +55,7 @@ actual object Downloads {
 
     actual fun savedIds(): Set<String> =
         root().listFiles()
-            ?.filter { it.isDirectory && it.listFiles()?.isNotEmpty() == true }
+            ?.filter { it.isDirectory && fileFor(it.name) != null }
             ?.map { it.name }
             ?.toSet()
             ?: emptySet()

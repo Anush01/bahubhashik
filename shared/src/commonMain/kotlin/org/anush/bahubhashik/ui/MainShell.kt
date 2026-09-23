@@ -41,12 +41,21 @@ import org.anush.bahubhashik.audio.Downloads
 import org.anush.bahubhashik.data.Api
 
 private object Route {
-    const val INBOX = "inbox"
-    const val SENT = "sent"
+    const val HOME = "home"
+
+    const val COMMUNITY = "community"
     const val PICKER = "picker"
     const val CONVERSATION = "conversation/{other}"
 
+    const val COMPOSE = "compose"
+    const val COMPOSE_NEW = "compose/new"
+    const val COMPOSITION = "composition/{id}"
+
+    /** Reachable from the drawer, so they show the menu button rather than back. */
+    val TOP_LEVEL = setOf(HOME, COMMUNITY, COMPOSE)
+
     fun conversation(other: String) = "conversation/$other"
+    fun composition(id: String) = "composition/$id"
 }
 
 /**
@@ -64,7 +73,7 @@ fun MainShell(api: Api, me: String, onSignOut: () -> Unit) {
     var confirmSignOut by remember { mutableStateOf(false) }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
-    val isTopLevel = route == null || route == Route.INBOX || route == Route.SENT
+    val isTopLevel = route == null || route in Route.TOP_LEVEL
 
     if (confirmSignOut) {
         // Signing out wipes saved recordings, which is not something to do
@@ -107,9 +116,10 @@ fun MainShell(api: Api, me: String, onSignOut: () -> Unit) {
                 onGo = { destination ->
                     scope.launch { drawer.close() }
                     nav.navigate(destination) {
-                        // Switching between the two lists shouldn't grow the
-                        // back stack — back from either should leave the app.
-                        popUpTo(Route.INBOX) { inclusive = destination == Route.INBOX }
+                        // Hopping between sections shouldn't grow the back
+                        // stack: back from any of them goes Home, and back
+                        // from Home leaves the app.
+                        popUpTo(Route.HOME) { inclusive = destination == Route.HOME }
                         launchSingleTop = true
                     }
                 },
@@ -150,22 +160,22 @@ fun MainShell(api: Api, me: String, onSignOut: () -> Unit) {
         ) { insets ->
             NavHost(
                 navController = nav,
-                startDestination = Route.INBOX,
+                startDestination = Route.HOME,
                 modifier = Modifier.padding(insets),
             ) {
-                composable(Route.INBOX) {
-                    InboxScreen(
+                composable(Route.HOME) {
+                    HomeScreen(
+                        onCommunity = { nav.navigate(Route.COMMUNITY) },
+                        onCompose = { nav.navigate(Route.COMPOSE) },
+                    )
+                }
+
+                composable(Route.COMMUNITY) {
+                    CommunityScreen(
                         api = api,
                         me = me,
                         onOpenConversation = { nav.navigate(Route.conversation(it)) },
                         onNewMessage = { nav.navigate(Route.PICKER) },
-                    )
-                }
-                composable(Route.SENT) {
-                    SentScreen(
-                        api = api,
-                        me = me,
-                        onOpenConversation = { nav.navigate(Route.conversation(it)) },
                     )
                 }
                 composable(Route.PICKER) {
@@ -185,15 +195,44 @@ fun MainShell(api: Api, me: String, onSignOut: () -> Unit) {
                     val other = backStackEntry.arguments?.read { getStringOrNull("other") }.orEmpty()
                     ConversationScreen(api = api, me = me, other = other)
                 }
+
+                composable(Route.COMPOSE) {
+                    ComposeHistoryScreen(
+                        api = api,
+                        me = me,
+                        onNew = { nav.navigate(Route.COMPOSE_NEW) },
+                        onOpen = { nav.navigate(Route.composition(it)) },
+                    )
+                }
+                composable(Route.COMPOSE_NEW) {
+                    NewCompositionScreen(
+                        api = api,
+                        me = me,
+                        onCreated = { id ->
+                            // Same trick as the picker: back from the result
+                            // goes to the list, not to an empty recorder.
+                            nav.navigate(Route.composition(id)) {
+                                popUpTo(Route.COMPOSE_NEW) { inclusive = true }
+                            }
+                        },
+                    )
+                }
+                composable(Route.COMPOSITION) { backStackEntry ->
+                    val id = backStackEntry.arguments?.read { getStringOrNull("id") }.orEmpty()
+                    CompositionScreen(api = api, id = id)
+                }
             }
         }
     }
 }
 
 private fun titleFor(route: String?, other: String?, me: String): String = when (route) {
-    Route.SENT -> "Messages I sent"
+    Route.COMMUNITY -> "Community"
     Route.PICKER -> "Send to"
     Route.CONVERSATION -> other.orEmpty().ifBlank { "Conversation" }
+    Route.COMPOSE -> "Compose"
+    Route.COMPOSE_NEW -> "New translation"
+    Route.COMPOSITION -> "Translation"
     else -> me
 }
 
@@ -218,8 +257,9 @@ private fun DrawerContents(
         HorizontalDivider()
         Spacer(modifier = Modifier.height(8.dp))
 
-        DrawerRow("Messages for me", current == Route.INBOX) { onGo(Route.INBOX) }
-        DrawerRow("Messages I sent", current == Route.SENT) { onGo(Route.SENT) }
+        DrawerRow("Home", current == Route.HOME) { onGo(Route.HOME) }
+        DrawerRow("Community", current == Route.COMMUNITY) { onGo(Route.COMMUNITY) }
+        DrawerRow("Compose", current == Route.COMPOSE) { onGo(Route.COMPOSE) }
 
         Spacer(modifier = Modifier.height(8.dp))
         HorizontalDivider()

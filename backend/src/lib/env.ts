@@ -41,7 +41,15 @@ export const env = {
   },
 };
 
-export const LANGUAGES = ["en-IN", "hi-IN", "mr-IN", "gu-IN", "kn-IN"] as const;
+/**
+ * Every language bulbul:v3 can speak. Translation and transcription cover all
+ * 22 scheduled languages, but output here is always audio, so the voice model
+ * sets the limit.
+ */
+export const LANGUAGES = [
+  "bn-IN", "en-IN", "gu-IN", "hi-IN", "kn-IN", "ml-IN",
+  "mr-IN", "od-IN", "pa-IN", "ta-IN", "te-IN",
+] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 export function isLanguage(value: unknown): value is Language {

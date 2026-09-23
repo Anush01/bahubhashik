@@ -9,6 +9,13 @@ setting, because the app already knows what language each person speaks.
 Built for two specific people: my mother, who speaks Marathi, and her friend,
 who speaks Kannada.
 
+The app has two halves:
+
+- **Community** — messages between people who both have the app, as above.
+- **Compose** — record something, pick any supported language, and share the
+  translated audio anywhere (WhatsApp, email) with someone who doesn't have
+  the app. Results are kept per person and saved to the phone automatically.
+
 ## How it works
 
 ```
@@ -36,9 +43,12 @@ a message from a person.
 
 ## Languages
 
-English, Hindi, Marathi, Gujarati, Kannada.
+Bengali, English, Gujarati, Hindi, Kannada, Malayalam, Marathi, Odia,
+Punjabi, Tamil, Telugu — every language Sarvam's `bulbul:v3` can speak.
 
-Constrained by text-to-speech, which is the narrowest link in the chain.
+Constrained by text-to-speech, which is the narrowest link in the chain:
+transcription and translation cover all 22 scheduled languages, but a
+language with no voice can't be the output of a voice message.
 OpenAI's `gpt-realtime-translate` was the original plan and was dropped: it
 synthesizes into 13 languages, and Hindi is the only Indic one among them.
 

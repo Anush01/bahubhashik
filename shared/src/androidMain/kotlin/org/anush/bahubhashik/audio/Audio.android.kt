@@ -149,6 +149,7 @@ actual class AudioPlayer {
 actual object Session {
     private const val PREFS = "bahubhashik"
     private const val KEY = "username"
+    private const val COMPOSE_LANGUAGE = "composeLanguage"
 
     private fun prefs() = AndroidContext.application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -160,6 +161,13 @@ actual object Session {
     }
 
     actual fun clear() {
-        prefs().edit().remove(KEY).apply()
+        prefs().edit().remove(KEY).remove(COMPOSE_LANGUAGE).apply()
+    }
+
+    actual fun lastComposeLanguage(): String? =
+        if (!AndroidContext.isInitialised) null else prefs().getString(COMPOSE_LANGUAGE, null)
+
+    actual fun saveComposeLanguage(code: String) {
+        prefs().edit().putString(COMPOSE_LANGUAGE, code).apply()
     }
 }

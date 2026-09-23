@@ -52,14 +52,23 @@ uses the synchronous STT endpoint instead of the slower batch job.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/health` | |
-| `GET` | `/users/languages` | the five supported languages |
-| `POST` | `/users` | `{ username, language }` — create or log in |
-| `GET` | `/users` | everyone, for the recipient picker |
-| `POST` | `/messages` | multipart: `sender`, `recipient`, `audio`, `durationSeconds` |
-| `GET` | `/messages?user=X` | inbox |
+| `GET` | `/users/languages` | supported languages and voices |
+| `GET` | `/users/lookup?username=X` | does the name exist, does it have a PIN |
+| `POST` | `/users` | `{ username, language, voice, pin }` — create |
+| `POST` | `/users/login` | `{ username, pin }` — verify a PIN |
+| `POST` | `/users/pin` | `{ username, pin }` — first PIN for an older account |
+| `GET` | `/users` | everyone, for the recipient picker (never includes PINs) |
+| `POST` | `/messages` | multipart: `sender`, `audio`, `durationSeconds`, and either `recipient` (community) or `targetLang` (composed) |
+| `GET` | `/messages?user=X` | received |
+| `GET` | `/messages?user=X&box=sent` | sent to other people |
+| `GET` | `/messages?user=X&box=composed` | translated for themselves, to share outside the app |
 | `GET` | `/messages?user=X&with=Y` | one conversation, both directions |
 | `GET` | `/messages/:id` | poll for status |
 | `POST` | `/messages/:id/retry` | re-run a failure without re-recording |
+
+A composed message has `kind: "composed"` and no recipient; its output
+language is chosen by the sender. Community messages take the recipient's
+language. Either way the sender speaks their own profile language.
 
 Audio comes back as short-lived signed URLs, not paths.
 

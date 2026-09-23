@@ -15,6 +15,9 @@ import platform.UIKit.UIApplication
 
 private const val FOLDER = "downloads"
 
+/** Left behind in a message's directory when its saved copy is deleted by hand. */
+private const val REMOVED_MARKER = ".removed"
+
 @OptIn(ExperimentalForeignApi::class)
 private fun ByteArray.toNSData(): NSData =
     if (isEmpty()) {
@@ -53,12 +56,13 @@ actual object Downloads {
      */
     private fun urlFor(messageId: String): NSURL? {
         val directory = directory(messageId)
-        val name = entries(directory.path.orEmpty()).firstOrNull() ?: return null
+        // Skips the removed marker, and anything else hidden.
+        val name = entries(directory.path.orEmpty()).firstOrNull { !it.startsWith(".") } ?: return null
         return directory.URLByAppendingPathComponent(name)
     }
 
     actual fun save(messageId: String, filename: String, bytes: ByteArray): String {
-        delete(messageId)
+        NSFileManager.defaultManager.removeItemAtURL(directory(messageId), null)
         val directory = directory(messageId)
         NSFileManager.defaultManager.createDirectoryAtURL(directory, true, null, null)
         val url = directory.URLByAppendingPathComponent(filename)!!
@@ -69,8 +73,20 @@ actual object Downloads {
     actual fun isSaved(messageId: String): Boolean = urlFor(messageId) != null
 
     actual fun delete(messageId: String) {
-        NSFileManager.defaultManager.removeItemAtURL(directory(messageId), null)
+        val directory = directory(messageId)
+        NSFileManager.defaultManager.removeItemAtURL(directory, null)
+        NSFileManager.defaultManager.createDirectoryAtURL(directory, true, null, null)
+        NSFileManager.defaultManager.createFileAtPath(
+            directory.URLByAppendingPathComponent(REMOVED_MARKER)!!.path.orEmpty(),
+            null,
+            null,
+        )
     }
+
+    actual fun wasRemoved(messageId: String): Boolean =
+        NSFileManager.defaultManager.fileExistsAtPath(
+            directory(messageId).URLByAppendingPathComponent(REMOVED_MARKER)!!.path.orEmpty(),
+        )
 
     actual fun deleteAll() {
         NSFileManager.defaultManager.removeItemAtURL(folder(), null)
@@ -78,7 +94,7 @@ actual object Downloads {
 
     actual fun savedIds(): Set<String> =
         entries(folder().path.orEmpty())
-            .filter { entries(directory(it).path.orEmpty()).isNotEmpty() }
+            .filter { urlFor(it) != null }
             .toSet()
 
     actual fun share(messageId: String) {

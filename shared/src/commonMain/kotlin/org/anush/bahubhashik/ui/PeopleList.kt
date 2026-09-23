@@ -37,7 +37,6 @@ fun GroupedMessagesScreen(
     personOf: (Message) -> String,
     emptyText: String,
     onOpenConversation: (String) -> Unit,
-    header: (@Composable () -> Unit)? = null,
 ) {
     var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -64,8 +63,6 @@ fun GroupedMessagesScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        header?.invoke()
-
         when {
             loading -> Loading()
             error != null -> ErrorBanner(error!!) { reload++ }

@@ -130,6 +130,13 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
             parameter("with", with)
         }.body<MessagesResponse>().messages
 
+    /** Messages this person translated for themselves, to share outside the app. */
+    suspend fun composed(username: String): List<Message> =
+        client.get("$baseUrl/messages") {
+            parameter("user", username)
+            parameter("box", "composed")
+        }.body<MessagesResponse>().messages
+
     suspend fun message(id: String): Message =
         client.get("$baseUrl/messages/$id").body()
 
@@ -144,9 +151,27 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
         client.post("$baseUrl/messages/$id/retry")
     }
 
+    /** A community message: the output language is whatever the recipient speaks. */
     suspend fun send(
         sender: String,
         recipient: String,
+        audio: ByteArray,
+        filename: String,
+        durationSeconds: Double,
+    ): Message = upload(sender, "recipient" to recipient, audio, filename, durationSeconds)
+
+    /** A composed message: translated into [targetLang] for the sender alone. */
+    suspend fun compose(
+        sender: String,
+        targetLang: String,
+        audio: ByteArray,
+        filename: String,
+        durationSeconds: Double,
+    ): Message = upload(sender, "targetLang" to targetLang, audio, filename, durationSeconds)
+
+    private suspend fun upload(
+        sender: String,
+        destination: Pair<String, String>,
         audio: ByteArray,
         filename: String,
         durationSeconds: Double,
@@ -156,7 +181,7 @@ class Api(private val baseUrl: String = ServerConfig.baseUrl) {
                 MultiPartFormDataContent(
                     formData {
                         append("sender", sender)
-                        append("recipient", recipient)
+                        append(destination.first, destination.second)
                         append("durationSeconds", durationSeconds.toString())
                         append(
                             "audio",

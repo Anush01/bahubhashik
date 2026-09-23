@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { supabase, signedUrl, uploadAudio } from "../lib/supabase.js";
-import { isLanguage, MAX_MESSAGE_SECONDS, type Language } from "../lib/env.js";
+import { isLanguage, LANGUAGES, MAX_MESSAGE_SECONDS, type Language } from "../lib/env.js";
 import { runPipeline } from "../services/pipeline.js";
 import { isVoice, type Voice } from "../services/sarvam.js";
 
@@ -13,7 +13,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 
 interface MessageRow {
   id: string;
   sender: string;
-  recipient: string;
+  recipient: string | null;
+  kind: "community" | "composed";
   status: string;
   source_lang: string;
   target_lang: string;
@@ -37,6 +38,7 @@ async function present(row: MessageRow) {
     id: row.id,
     sender: row.sender,
     recipient: row.recipient,
+    kind: row.kind,
     status: row.status,
     sourceLang: row.source_lang,
     targetLang: row.target_lang,
@@ -50,9 +52,12 @@ async function present(row: MessageRow) {
   };
 }
 
+const BOXES = ["received", "sent", "composed"] as const;
+
 /**
  * Received:     GET /messages?user=sunita
  * Sent:         GET /messages?user=sunita&box=sent
+ * Composed:     GET /messages?user=sunita&box=composed
  * Conversation: GET /messages?user=sunita&with=lakshmi   (both directions)
  */
 messages.get("/", async (req, res) => {
@@ -60,8 +65,8 @@ messages.get("/", async (req, res) => {
   const other = String(req.query.with ?? "").trim();
   const box = String(req.query.box ?? "received").trim();
   if (!user) return res.status(400).json({ error: "user query parameter is required" });
-  if (box !== "received" && box !== "sent") {
-    return res.status(400).json({ error: 'box must be "received" or "sent"' });
+  if (!(BOXES as readonly string[]).includes(box)) {
+    return res.status(400).json({ error: `box must be one of: ${BOXES.join(", ")}` });
   }
 
   let query = supabase.from("messages").select("*").order("created_at", { ascending: false });
@@ -71,7 +76,10 @@ messages.get("/", async (req, res) => {
       `and(sender.eq.${user},recipient.eq.${other}),and(sender.eq.${other},recipient.eq.${user})`,
     );
   } else if (box === "sent") {
-    query = query.eq("sender", user);
+    // Composed messages are the sender's too, but they were never sent to anyone.
+    query = query.eq("sender", user).eq("kind", "community");
+  } else if (box === "composed") {
+    query = query.eq("sender", user).eq("kind", "composed");
   } else {
     query = query.eq("recipient", user);
   }
@@ -94,14 +102,31 @@ messages.get("/:id", async (req, res) => {
   res.json(await present(data as MessageRow));
 });
 
+/**
+ * Two shapes, told apart by which field is present:
+ *   sender + recipient   a community message; the output language is the recipient's
+ *   sender + targetLang  a composed message; translated for the sender to share
+ *                        outside the app, delivered to nobody
+ */
 messages.post("/", upload.single("audio"), async (req, res) => {
   const sender = String(req.body?.sender ?? "").trim();
   const recipient = String(req.body?.recipient ?? "").trim();
+  const requestedLang = String(req.body?.targetLang ?? "").trim();
   const audio = req.file;
 
-  if (!sender || !recipient) return res.status(400).json({ error: "sender and recipient are required" });
-  if (sender === recipient) return res.status(400).json({ error: "cannot send a message to yourself" });
+  if (!sender) return res.status(400).json({ error: "sender is required" });
+  if (!recipient && !requestedLang) {
+    return res.status(400).json({ error: "either recipient or targetLang is required" });
+  }
+  if (recipient && requestedLang) {
+    return res.status(400).json({ error: "send recipient or targetLang, not both" });
+  }
+  if (requestedLang && !isLanguage(requestedLang)) {
+    return res.status(400).json({ error: `targetLang must be one of: ${LANGUAGES.join(", ")}` });
+  }
+  if (recipient && sender === recipient) return res.status(400).json({ error: "cannot send a message to yourself" });
   if (!audio) return res.status(400).json({ error: "an audio file is required (field name: audio)" });
+  const kind = recipient ? "community" : "composed";
 
   const rawDuration = req.body?.durationSeconds;
   const durationSeconds = rawDuration === undefined || rawDuration === "" ? null : Number(rawDuration);
@@ -115,16 +140,18 @@ messages.post("/", upload.single("audio"), async (req, res) => {
   const { data: people, error: peopleError } = await supabase
     .from("users")
     .select("username, language, voice")
-    .in("username", [sender, recipient]);
+    .in("username", recipient ? [sender, recipient] : [sender]);
   if (peopleError) return res.status(500).json({ error: peopleError.message });
 
   const senderRow = people?.find((p) => p.username === sender);
   const recipientRow = people?.find((p) => p.username === recipient);
   if (!senderRow) return res.status(404).json({ error: `unknown sender "${sender}"` });
-  if (!recipientRow) return res.status(404).json({ error: `unknown recipient "${recipient}"` });
+  if (recipient && !recipientRow) return res.status(404).json({ error: `unknown recipient "${recipient}"` });
 
+  // Either way the sender is speaking their own declared language; only
+  // where the output language comes from differs.
   const sourceLang = senderRow.language;
-  const targetLang = recipientRow.language;
+  const targetLang = recipientRow ? recipientRow.language : requestedLang;
   if (!isLanguage(sourceLang) || !isLanguage(targetLang)) {
     return res.status(500).json({ error: "a participant has an unsupported language on file" });
   }
@@ -133,7 +160,8 @@ messages.post("/", upload.single("audio"), async (req, res) => {
     .from("messages")
     .insert({
       sender,
-      recipient,
+      recipient: recipient || null,
+      kind,
       status: "uploaded",
       source_lang: sourceLang,
       target_lang: targetLang,

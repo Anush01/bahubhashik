@@ -155,6 +155,7 @@ actual class AudioPlayer {
 
 actual object Session {
     private const val KEY = "bahubhashik.username"
+    private const val COMPOSE_LANGUAGE = "bahubhashik.composeLanguage"
 
     actual fun savedUsername(): String? =
         NSUserDefaults.standardUserDefaults.stringForKey(KEY)?.ifBlank { null }
@@ -165,5 +166,13 @@ actual object Session {
 
     actual fun clear() {
         NSUserDefaults.standardUserDefaults.removeObjectForKey(KEY)
+        NSUserDefaults.standardUserDefaults.removeObjectForKey(COMPOSE_LANGUAGE)
+    }
+
+    actual fun lastComposeLanguage(): String? =
+        NSUserDefaults.standardUserDefaults.stringForKey(COMPOSE_LANGUAGE)
+
+    actual fun saveComposeLanguage(code: String) {
+        NSUserDefaults.standardUserDefaults.setObject(code, COMPOSE_LANGUAGE)
     }
 }

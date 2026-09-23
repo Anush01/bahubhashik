@@ -6,7 +6,11 @@ create extension if not exists "pgcrypto";
 -- v0 identity is a bare username. No passwords, no auth.
 create table if not exists users (
   username   text primary key,
-  language   text not null check (language in ('en-IN','hi-IN','mr-IN','gu-IN','kn-IN')),
+  -- Every language Sarvam can speak (bulbul:v3). Translation covers more, but a
+  -- language with no voice can't be the output of a voice message.
+  language   text not null check (language in (
+    'bn-IN','en-IN','gu-IN','hi-IN','kn-IN','ml-IN','mr-IN','od-IN','pa-IN','ta-IN','te-IN'
+  )),
   -- Which synthesized voice this person's messages are spoken in on the
   -- recipient's phone. A voice choice, not a claim about the speaker.
   voice      text not null default 'female' check (voice in ('female','male')),
@@ -23,7 +27,10 @@ create table if not exists users (
 create table if not exists messages (
   id                    uuid primary key default gen_random_uuid(),
   sender                text not null references users(username) on delete cascade,
-  recipient             text not null references users(username) on delete cascade,
+  -- Null for composed messages, which are translated for the sender to share
+  -- outside the app rather than delivered to anyone in it.
+  recipient             text references users(username) on delete cascade,
+  kind                  text not null default 'community' check (kind in ('community','composed')),
 
   -- uploaded -> transcribing -> translating -> synthesizing -> ready | failed
   status                text not null default 'uploaded',
@@ -41,11 +48,14 @@ create table if not exists messages (
   error                 text,
 
   created_at            timestamptz not null default now(),
-  updated_at            timestamptz not null default now()
+  updated_at            timestamptz not null default now(),
+
+  constraint messages_recipient_matches_kind check ((kind = 'community') = (recipient is not null))
 );
 
 create index if not exists messages_recipient_idx on messages (recipient, created_at desc);
 create index if not exists messages_pair_idx      on messages (sender, recipient, created_at desc);
+create index if not exists messages_kind_idx      on messages (sender, kind, created_at desc);
 
 -- Everything routes through the Node backend using the service-role key,
 -- so RLS stays off in v0. Revisit if the client ever talks to Supabase directly.

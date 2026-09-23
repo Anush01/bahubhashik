@@ -1,5 +1,9 @@
 package org.anush.bahubhashik.audio
 
+import org.anush.bahubhashik.data.Api
+import org.anush.bahubhashik.data.Message
+import org.anush.bahubhashik.data.englishLanguageName
+
 /**
  * Saved copies of translated audio, kept inside the app's own storage.
  *
@@ -13,7 +17,14 @@ expect object Downloads {
 
     fun isSaved(messageId: String): Boolean
 
+    /**
+     * Deletes the saved copy and remembers that it was deleted on purpose, so
+     * automatic saving doesn't quietly bring it back.
+     */
     fun delete(messageId: String)
+
+    /** True once someone has deleted this message's saved copy themselves. */
+    fun wasRemoved(messageId: String): Boolean
 
     /** Everything, for sign-out. */
     fun deleteAll()
@@ -33,9 +44,17 @@ expect object Downloads {
  * messages are MP3, but ones translated before that change are still WAV, and
  * a .mp3 name on WAV bytes is worse than either.
  */
-fun downloadFilename(sender: String, recipient: String, sourceUrl: String): String {
+fun downloadFilename(message: Message, sourceUrl: String): String {
     val safe = { text: String -> text.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(24) }
-    return "BahuBhashik ${safe(sender)} to ${safe(recipient)}.${extensionOf(sourceUrl)}"
+    // A composed message has no recipient; the language is what tells two apart.
+    val about = message.recipient?.let { "to ${safe(it)}" } ?: englishLanguageName(message.targetLang)
+    return "BahuBhashik ${safe(message.sender)} $about.${extensionOf(sourceUrl)}"
+}
+
+/** Fetches a ready message's translation and keeps it on the phone. */
+suspend fun saveTranslation(api: Api, message: Message) {
+    val url = message.translatedAudioUrl ?: return
+    Downloads.save(message.id, downloadFilename(message, url), api.download(url))
 }
 
 /** Signed URLs carry a query string, so the extension sits before the '?'. */

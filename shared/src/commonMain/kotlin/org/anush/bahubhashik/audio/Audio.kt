@@ -50,4 +50,8 @@ expect object Session {
     fun savedUsername(): String?
     fun save(username: String)
     fun clear()
+
+    /** The language last translated into on Compose — usually the next one too. */
+    fun lastComposeLanguage(): String?
+    fun saveComposeLanguage(code: String)
 }

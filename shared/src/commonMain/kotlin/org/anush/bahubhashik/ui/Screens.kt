@@ -29,17 +29,12 @@ import org.anush.bahubhashik.data.languageName
 
 /** Messages addressed to me, grouped by who sent them. */
 @Composable
-fun InboxScreen(api: Api, me: String, onOpenConversation: (String) -> Unit, onNewMessage: () -> Unit) {
+fun InboxScreen(api: Api, me: String, onOpenConversation: (String) -> Unit) {
     GroupedMessagesScreen(
         load = { api.inbox(me) },
         personOf = { it.sender },
         emptyText = "Nothing yet. Messages people send you will appear here.",
         onOpenConversation = onOpenConversation,
-        header = {
-            Column(modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)) {
-                BigButton("New message", onNewMessage)
-            }
-        },
     )
 }
 
@@ -48,7 +43,8 @@ fun InboxScreen(api: Api, me: String, onOpenConversation: (String) -> Unit, onNe
 fun SentScreen(api: Api, me: String, onOpenConversation: (String) -> Unit) {
     GroupedMessagesScreen(
         load = { api.sent(me) },
-        personOf = { it.recipient },
+        // The server only returns community messages here, which always have one.
+        personOf = { it.recipient.orEmpty() },
         emptyText = "You haven't sent anything yet.",
         onOpenConversation = onOpenConversation,
     )
