@@ -258,7 +258,8 @@ private fun DrawerContents(
         Spacer(modifier = Modifier.height(8.dp))
 
         DrawerRow("Home", current == Route.HOME) { onGo(Route.HOME) }
-        DrawerRow("Community", current == Route.COMMUNITY) { onGo(Route.COMMUNITY) }
+        // Hidden for now — see HomeScreen.
+        // DrawerRow("Community", current == Route.COMMUNITY) { onGo(Route.COMMUNITY) }
         DrawerRow("Compose", current == Route.COMPOSE) { onGo(Route.COMPOSE) }
 
         Spacer(modifier = Modifier.height(8.dp))

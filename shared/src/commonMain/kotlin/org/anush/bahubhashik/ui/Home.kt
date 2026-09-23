@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,18 +33,18 @@ fun HomeScreen(onCommunity: () -> Unit, onCompose: () -> Unit) {
         modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        HomeBox(
-            title = "Community",
-            description = "Send voice messages to people on BahuBhashik. They hear you in their language.",
-            container = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.weight(1f),
-            onClick = onCommunity,
-        )
+        // Community is hidden for now; its screens and routes still work.
+        // Uncomment this (and the drawer row in MainShell) to bring it back.
+        // HomeBox(
+        //     title = "Community",
+        //     description = "Send voice messages to people on BahuBhashik. They hear you in their language.",
+        //     container = MaterialTheme.colorScheme.primaryContainer,
+        //     onClick = onCommunity,
+        // )
         HomeBox(
             title = "Compose Message",
             description = "Record something, pick a language, and share the translation on WhatsApp or anywhere else.",
             container = MaterialTheme.colorScheme.tertiaryContainer,
-            modifier = Modifier.weight(1f),
             onClick = onCompose,
         )
     }
@@ -54,16 +55,17 @@ private fun HomeBox(
     title: String,
     description: String,
     container: Color,
-    modifier: Modifier,
     onClick: () -> Unit,
 ) {
+    // Sized to its content rather than splitting the screen, so it reads as a
+    // button however many sections are showing.
     Card(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp).clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = container),
         shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(28.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp).padding(28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp, alignment = androidx.compose.ui.Alignment.CenterVertically),
         ) {
             Text(title, style = MaterialTheme.typography.headlineMedium)
